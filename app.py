@@ -15,7 +15,6 @@ from src.data_processing.preprocessing import (
     create_enriched_tracking_data,
     get_enriched_data_info
 )
-from src.data_processing.knowledge_bank import KnowledgeBank
 
 # Configure Streamlit page
 st.set_page_config(
@@ -78,8 +77,6 @@ st.markdown(f"""
 # Initialize session state
 if 'enriched_data' not in st.session_state:
     st.session_state.enriched_data = None
-if 'knowledge_bank' not in st.session_state:
-    st.session_state.knowledge_bank = None
 if 'uploaded_files' not in st.session_state:
     st.session_state.uploaded_files = {}
 if 'processing_complete' not in st.session_state:
@@ -120,7 +117,6 @@ def process_data(metadata_path, tracking_path, events_path, phases_path, match_i
         (10, "Loading metadata..."),
         (25, "Processing tracking data..."),
         (50, "Creating enriched tracking data..."),
-        (70, "Generating knowledge bank..."),
         (90, "Finalizing analysis..."),
         (100, "Analysis complete!")
     ]
@@ -141,23 +137,6 @@ def process_data(metadata_path, tracking_path, events_path, phases_path, match_i
                     match_id
                 )
                 st.session_state.enriched_data = enriched_df
-
-            elif progress == 70:
-                # Generate knowledge bank
-                kb = KnowledgeBank()
-                knowledge_bank = kb.generate_knowledge_bank(
-                    metadata_path=metadata_path,
-                    tracking_path=tracking_path,
-                    events_path=events_path,
-                    phases_path=phases_path,
-                    enriched_df=st.session_state.enriched_data
-                )
-                st.session_state.knowledge_bank = knowledge_bank
-
-                # Save knowledge bank
-                kb_output_path = "data/cache/knowledge_bank.json"
-                os.makedirs("data/cache", exist_ok=True)
-                kb.save_knowledge_bank(knowledge_bank, kb_output_path)
 
             time.sleep(0.3)
 
@@ -183,7 +162,7 @@ def main():
         st.header("📋 Navigation")
         page = st.radio(
             "Select Page",
-            ["Upload Data", "View Enriched Data", "Knowledge Bank"],
+            ["Upload Data", "View Enriched Data"],
             index=0
         )
 
@@ -192,8 +171,6 @@ def main():
         st.markdown("""
         This platform processes SkillCorner match data to generate:
         - Enriched tracking data
-        - Comprehensive field documentation
-        - Knowledge bank for downstream tasks
         """)
 
     # Page: Upload Data
@@ -279,7 +256,7 @@ def main():
                     if st.session_state.processing_complete:
                         st.balloons()
                         st.success("🎉 Data processing completed successfully!")
-                        st.info("👈 Navigate to 'View Enriched Data' or 'Knowledge Bank' in the sidebar")
+                        st.info("👈 Navigate to 'View Enriched Data' in the sidebar")
         else:
             st.warning("⚠️ Please upload all four required files to continue")
 
@@ -391,84 +368,6 @@ def main():
 
         else:
             st.warning("⚠️ No enriched data available. Please upload and process data first.")
-            st.info("👈 Go to 'Upload Data' page to get started")
-
-    # Page: Knowledge Bank
-    elif page == "Knowledge Bank":
-        st.header("📚 Knowledge Bank")
-        st.markdown("Comprehensive field documentation for all datasets")
-
-        if st.session_state.knowledge_bank is not None:
-            kb = st.session_state.knowledge_bank
-
-            # Overview
-            st.subheader("📋 Overview")
-            col1, col2 = st.columns(2)
-
-            with col1:
-                st.write(f"**Created:** {kb.get('created_at', 'N/A')}")
-                st.write(f"**Version:** {kb.get('version', 'N/A')}")
-
-            with col2:
-                datasets = [k for k in kb.keys() if k not in ['created_at', 'version', 'description']]
-                st.write(f"**Datasets:** {len(datasets)}")
-                st.write(f"**Datasets:** {', '.join(datasets)}")
-
-            st.markdown("---")
-
-            # Display each dataset
-            for dataset_name in ['metadata', 'tracking', 'events', 'phases', 'enriched_tracking']:
-                if dataset_name in kb:
-                    dataset_info = kb[dataset_name]
-
-                    with st.expander(f"📊 {dataset_name.replace('_', ' ').title()}", expanded=False):
-                        st.markdown(f"**Description:** {dataset_info.get('description', 'N/A')}")
-
-                        # Display fields
-                        if 'all_fields' in dataset_info:
-                            st.markdown(f"**Total Fields:** {len(dataset_info['all_fields'])}")
-
-                            # Show fields in a searchable format
-                            search = st.text_input(
-                                f"Search fields in {dataset_name}",
-                                key=f"search_{dataset_name}"
-                            )
-
-                            fields = dataset_info['all_fields']
-                            if search:
-                                fields = [f for f in fields if search.lower() in f.lower()]
-
-                            if fields:
-                                st.write(f"**Fields ({len(fields)}):**")
-                                # Display in columns for better readability
-                                n_cols = 3
-                                cols = st.columns(n_cols)
-                                for i, field in enumerate(fields):
-                                    with cols[i % n_cols]:
-                                        st.write(f"• {field}")
-                            else:
-                                st.warning("No fields match your search")
-
-                        # Display critical fields if available
-                        if 'critical_fields' in dataset_info:
-                            st.markdown("**Critical Fields:**")
-                            for field in dataset_info['critical_fields']:
-                                st.write(f"🔑 {field}")
-
-            # Download knowledge bank
-            st.markdown("---")
-            st.subheader("💾 Download Knowledge Bank")
-
-            kb_json = json.dumps(kb, indent=2)
-            st.download_button(
-                label="📥 Download Knowledge Bank (JSON)",
-                data=kb_json,
-                file_name="knowledge_bank.json",
-                mime="application/json"
-            )
-
-        else:
-            st.warning("⚠️ Knowledge bank not generated yet. Please upload and process data first.")
             st.info("👈 Go to 'Upload Data' page to get started")
 
 
