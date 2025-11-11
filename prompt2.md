@@ -1141,11 +1141,6 @@ Phase 3: Report Dashboard
 - [ ] Metric cards
 - [ ] Export functionality
 
-### Phase 4: Video System 
-- [ ] Frame-based clip extraction
-- [ ] mplsoccer annotations
-- [ ] ffmpeg rendering
-- [ ] Video player component
 
 Performance
 
