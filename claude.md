@@ -7,7 +7,7 @@ Purpose: Blueprint for building an AI-powered football match analysis system wit
 ## Table Content
 Application Overview
 Architecture Diagram
-Data Schemas & Validation
+Data Schemas 
 Data Processing Pipeline
 
 APPLICATION OVERVIEW
@@ -726,8 +726,7 @@ football-intelligence-platform/
 │   ├── data_processing/
 │   │   ├── __init__.py
 │   │   ├── ingestion.py
-│   │   ├── standardization.py
-│   │   └── validation.py
+│   │   ├── preprocessing.py
 │   │
 │   ├── analytics/
 │   │   ├── __init__.py
@@ -803,27 +802,9 @@ Create:
 1. Project structure (all folders)
 2. requirements.txt
 3. Basic Streamlit app with file upload interface
-4. Data validation module
+4. Data uploading module with pre-processing steps
 
 Use the schemas from the spec. Show me the upload UI first.
-```
-
-**Follow-up Prompts:**
-```
-Now implement the data standardization pipeline from Section "Data Processing Pipeline - Stage 2"
-```
-```
-Implement Section 1 metrics: Team Identity & Setup. Use the exact functions from the spec.
-```
-```
-Create the report dashboard UI with collapsible sections for the first 3 framework sections.
-
-CRITICAL IMPLEMENTATION NOTES
-Data Integrity
-
-Always validate frame alignment between tracking, events, phases
-Handle missing player IDs gracefully
-Check for temporal gaps
 
 Performance
 
