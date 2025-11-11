@@ -15,6 +15,8 @@ from src.data_processing.preprocessing import (
     create_enriched_tracking_data,
     get_enriched_data_info
 )
+from src.analytics.framework import MetricsEngine
+from src.ui.report_page import render_match_report, render_export_options
 
 # Configure Streamlit page
 st.set_page_config(
@@ -24,18 +26,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Color scheme as per specification
-COLORS = {
-    "primary": "#00A85D",
-    "secondary": "#1D73E8",
-    "accent": "#00D8B0",
-    "success": "#4CAF50",
-    "warning": "#FFB300",
-    "danger": "#D32F2F",
-    "neutral": "#6E6E6E",
-    "background": "#FFFFFF",
-    "text": "#212121"
-}
+# SkillCorner Color scheme
+from src.analytics.colors import SKILLCORNER_COLORS
+
+COLORS = SKILLCORNER_COLORS
 
 # Custom CSS
 st.markdown(f"""
@@ -81,6 +75,12 @@ if 'uploaded_files' not in st.session_state:
     st.session_state.uploaded_files = {}
 if 'processing_complete' not in st.session_state:
     st.session_state.processing_complete = False
+if 'metrics_results' not in st.session_state:
+    st.session_state.metrics_results = None
+if 'events_df' not in st.session_state:
+    st.session_state.events_df = None
+if 'phases_df' not in st.session_state:
+    st.session_state.phases_df = None
 
 
 def save_uploaded_file(uploaded_file, directory: str) -> str:
@@ -112,33 +112,55 @@ def process_data(metadata_path, tracking_path, events_path, phases_path, match_i
         phases_path: Path to phases file
         match_id: Match identifier
     """
-    # Progress stages
-    progress_stages = [
-        (10, "Loading metadata..."),
-        (25, "Processing tracking data..."),
-        (50, "Creating enriched tracking data..."),
-        (90, "Finalizing analysis..."),
-        (100, "Analysis complete!")
-    ]
-
     progress_bar = st.progress(0)
     status_text = st.empty()
 
     try:
-        for progress, message in progress_stages:
-            status_text.text(f"⚙️ {message}")
-            progress_bar.progress(progress)
+        # Stage 1: Load data
+        status_text.text("⚙️ Loading metadata...")
+        progress_bar.progress(10)
 
-            if progress == 25:
-                # Create enriched tracking data
-                enriched_df = create_enriched_tracking_data(
-                    tracking_path,
-                    metadata_path,
-                    match_id
-                )
-                st.session_state.enriched_data = enriched_df
+        # Create enriched tracking data
+        enriched_df = create_enriched_tracking_data(
+            tracking_path,
+            metadata_path,
+            match_id
+        )
+        st.session_state.enriched_data = enriched_df
 
-            time.sleep(0.3)
+        status_text.text("⚙️ Loading events and phases data...")
+        progress_bar.progress(25)
+
+        # Load events and phases
+        events_df = pd.read_csv(events_path)
+        phases_df = pd.read_csv(phases_path)
+
+        st.session_state.events_df = events_df
+        st.session_state.phases_df = phases_df
+
+        # Stage 2: Compute metrics
+        status_text.text("⚙️ Computing tactical metrics...")
+        progress_bar.progress(40)
+
+        # Initialize metrics engine
+        metrics_engine = MetricsEngine()
+
+        # Progress callback for metrics computation
+        def metrics_progress(current, total, message):
+            percent = 40 + int((current / total) * 50)  # 40-90%
+            progress_bar.progress(percent)
+            status_text.text(f"⚙️ {message} ({current}/{total})")
+
+        # Compute all metrics with progress tracking
+        metrics_results = metrics_engine.compute_all_metrics(
+            events_df,
+            phases_df,
+            team_id=match_id,
+            use_cache=True,
+            progress_callback=metrics_progress
+        )
+
+        st.session_state.metrics_results = metrics_results
 
         progress_bar.progress(100)
         status_text.text("✅ Analysis complete!")
@@ -146,6 +168,8 @@ def process_data(metadata_path, tracking_path, events_path, phases_path, match_i
 
     except Exception as e:
         st.error(f"❌ Error during processing: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
         progress_bar.empty()
         status_text.empty()
 
@@ -162,7 +186,7 @@ def main():
         st.header("📋 Navigation")
         page = st.radio(
             "Select Page",
-            ["Upload Data", "View Enriched Data"],
+            ["Upload Data", "Match Analysis Report"],
             index=0
         )
 
@@ -170,7 +194,9 @@ def main():
         st.markdown("### About")
         st.markdown("""
         This platform processes SkillCorner match data to generate:
-        - Enriched tracking data
+        - Comprehensive tactical analysis
+        - Interactive match reports
+        - Advanced metrics dashboard
         """)
 
     # Page: Upload Data
@@ -256,7 +282,7 @@ def main():
                     if st.session_state.processing_complete:
                         st.balloons()
                         st.success("🎉 Data processing completed successfully!")
-                        st.info("👈 Navigate to 'View Enriched Data' in the sidebar")
+                        st.info("👈 Navigate to 'Match Analysis Report' in the sidebar to view comprehensive analysis")
         else:
             st.warning("⚠️ Please upload all four required files to continue")
 
@@ -274,101 +300,21 @@ def main():
             if missing:
                 st.error(f"Missing files: {', '.join(missing)}")
 
-    # Page: View Enriched Data
-    elif page == "View Enriched Data":
-        st.header("📊 Enriched Tracking Data")
-
-        if st.session_state.enriched_data is not None:
-            enriched_df = st.session_state.enriched_data
-
-            # Display summary statistics
-            st.subheader("📈 Dataset Summary")
-
-            col1, col2, col3, col4 = st.columns(4)
-
-            with col1:
-                st.metric("Total Rows", f"{len(enriched_df):,}")
-            with col2:
-                st.metric("Total Columns", len(enriched_df.columns))
-            with col3:
-                st.metric("Unique Players", enriched_df['player_id'].nunique())
-            with col4:
-                st.metric("Unique Frames", enriched_df['frame'].nunique())
-
-            st.markdown("---")
-
-            # Display match information
-            if len(enriched_df) > 0:
-                st.subheader("⚽ Match Information")
-                col1, col2 = st.columns(2)
-
-                with col1:
-                    st.write(f"**Match:** {enriched_df['match_name'].iloc[0]}")
-                    st.write(f"**Date:** {enriched_df['date_time'].iloc[0]}")
-
-                with col2:
-                    st.write(f"**Home Team:** {enriched_df['home_team.name'].iloc[0]}")
-                    st.write(f"**Away Team:** {enriched_df['away_team.name'].iloc[0]}")
-
-            st.markdown("---")
-
-            # Display data
-            st.subheader("🔍 Data Preview")
-
-            # Filter options
-            col1, col2 = st.columns(2)
-            with col1:
-                period_filter = st.selectbox(
-                    "Filter by Period",
-                    ["All"] + sorted(enriched_df['period'].unique().tolist())
-                )
-            with col2:
-                team_filter = st.selectbox(
-                    "Filter by Team",
-                    ["All"] + sorted(enriched_df['team_name'].unique().tolist())
-                )
-
-            # Apply filters
-            filtered_df = enriched_df.copy()
-            if period_filter != "All":
-                filtered_df = filtered_df[filtered_df['period'] == period_filter]
-            if team_filter != "All":
-                filtered_df = filtered_df[filtered_df['team_name'] == team_filter]
-
-            # Display filtered data
-            st.dataframe(
-                filtered_df.head(1000),
-                use_container_width=True,
-                height=400
+    # Page: Match Analysis Report
+    elif page == "Match Analysis Report":
+        if st.session_state.metrics_results is None:
+            st.warning("⚠️ No analysis available. Please upload and process data first.")
+            st.info("👈 Go to 'Upload Data' page to get started")
+        else:
+            # Render the match report
+            render_match_report(
+                st.session_state.metrics_results,
+                st.session_state.events_df,
+                st.session_state.phases_df
             )
 
-            st.info(f"Showing first 1000 rows of {len(filtered_df):,} filtered rows")
-
-            # Download options
-            st.markdown("---")
-            st.subheader("💾 Download Data")
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                csv = filtered_df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📥 Download as CSV",
-                    data=csv,
-                    file_name="enriched_tracking_data.csv",
-                    mime="text/csv"
-                )
-
-            with col2:
-                # Save to parquet for efficiency
-                parquet_path = "data/processed/enriched_tracking_data.parquet"
-                os.makedirs("data/processed", exist_ok=True)
-                enriched_df.to_parquet(parquet_path)
-                st.success(f"✅ Data saved to {parquet_path}")
-
-        else:
-            st.warning("⚠️ No enriched data available. Please upload and process data first.")
-            st.info("👈 Go to 'Upload Data' page to get started")
+            # Export options
+            render_export_options(st.session_state.metrics_results)
 
 
 if __name__ == "__main__":
